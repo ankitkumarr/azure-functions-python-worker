@@ -2,7 +2,7 @@
     "description":{
         "language":"python",
         "extensions":[".py"],
-        "defaultExecutablePath":"python",
+        "defaultExecutablePath":"C:\\wagit\\functions\\azure-functions-python-worker\\.env\\Scripts\\python.exe",
         "defaultWorkerPath":"worker.py"
     }
 }

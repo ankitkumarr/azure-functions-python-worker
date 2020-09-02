@@ -280,7 +280,7 @@ setup(
               'azure_functions_worker._thirdparty'],
     install_requires=[
         'grpcio~=1.26.0',
-        'grpcio-tools~=1.26.0',
+        'grpcio-tools~=1.26.0'
     ],
     extras_require={
         'dev': [

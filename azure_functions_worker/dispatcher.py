@@ -251,6 +251,27 @@ class Dispatcher(metaclass=DispatcherMeta):
                 result=protos.StatusResult(
                     status=protos.StatusResult.Success)))
 
+    async def _handle__functions_index_request(self, req):
+        # load all the functions into place
+        functions = loader.load_function("main", "C:\\wagit\\functions\\pythonapp", "C:\\wagit\\functions\\pythonapp\\app.py", "main")
+        app = functions()
+        logger.info(app.app_name)
+
+        # load the different functions that we need
+        # for name, function in app.functions.items():
+        #     self._functions.add_function(name, function)
+
+        functions_metadata = []
+        dummyMetadata = protos.RpcFullFunctionMetadata(name="name", script_file="scriptfile", function_directory="functiondirectory", entry_point="entrypoint", language="python", binding_metadata=[])
+        functions_metadata.append(dummyMetadata)
+
+        return protos.StreamingMessage(
+            request_id=self.request_id,
+            functions_index_response=protos.FunctionsIndexResponse(
+                functions_metadata=functions_metadata
+            )
+        )
+
     async def _handle__function_load_request(self, req):
         func_request = req.function_load_request
         function_id = func_request.function_id
