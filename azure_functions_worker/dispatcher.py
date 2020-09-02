@@ -14,7 +14,8 @@ import os
 import sys
 import importlib
 import inspect
-
+import uuid
+import json
 import grpc
 
 from . import bindings
@@ -252,25 +253,86 @@ class Dispatcher(metaclass=DispatcherMeta):
                     status=protos.StatusResult.Success)))
 
     async def _handle__functions_index_request(self, req):
-        # load all the functions into place
-        functions = loader.load_function("main", "C:\\wagit\\functions\\pythonapp", "C:\\wagit\\functions\\pythonapp\\app.py", "main")
-        app = functions()
-        logger.info(app.app_name)
 
-        # load the different functions that we need
-        # for name, function in app.functions.items():
-        #     self._functions.add_function(name, function)
-
+        function_dir = req.functions_index_request.functions_directory
+        # entryfile must be "main.py" for now
+        # TODO: Revisit this
+        function_load_file = "main.py"
         functions_metadata = []
-        dummyMetadata = protos.RpcFullFunctionMetadata(name="name", script_file="scriptfile", function_directory="functiondirectory", entry_point="entrypoint", language="python", binding_metadata=[])
-        functions_metadata.append(dummyMetadata)
 
-        return protos.StreamingMessage(
-            request_id=self.request_id,
-            functions_index_response=protos.FunctionsIndexResponse(
-                functions_metadata=functions_metadata
+        try:
+            # load all the functions into place
+            functions = loader.load_function("main", function_dir, function_dir + os.path.sep + function_load_file , "main")
+            app = functions()
+            logger.info(app.app_name)
+
+            # load the different functions that we need
+            for name, function in app.functions.items():
+                function_id = str(uuid.uuid4())
+                function.script_file = function_dir + os.path.sep + function_load_file
+                function.function_directory = function_dir
+                #self._functions.add_function(function_id, function.function)
+                # create the metadata for the function
+                binding_metadata = []
+                adapter_binding_metadata = {}
+
+                # TODO: For now setting all the datatype to undefined
+                for binding in function.bindings:
+                    binding_metadata.append(protos.RpcFullBindingMetadata(raw=json.dumps(binding.__dict__)))
+                    adapter_binding_metadata[binding.name] = protos.BindingInfo(
+                        type=binding.type,
+                        direction=protos.BindingInfo.Direction.Value(binding.direction),
+                        data_type=protos.BindingInfo.DataType.undefined
+                    )
+
+                metadata = protos.RpcFullFunctionMetadata(
+                    id=function_id,
+                    name=function.name,
+                    script_file=function.script_file,
+                    function_directory=function.function_directory,
+                    entry_point='',
+                    language="python",
+                    binding_metadata=binding_metadata
+                )
+
+                # old_metadata = protos.R
+                # Adapter for the current RpcFunctionMetadata
+                adapter_metadata = protos.RpcFunctionMetadata(
+                    name=name,
+                    directory=function.function_directory,
+                    script_file=function.script_file,
+                    entry_point='',
+                    bindings=adapter_binding_metadata
+                )
+
+                self._functions.add_function(function_id, function.function, adapter_metadata)
+                functions_metadata.append(metadata)
+
+            return protos.StreamingMessage(
+                request_id=self.request_id,
+                functions_index_response=protos.FunctionsIndexResponse(
+                    functions_metadata=functions_metadata
+                )
             )
-        )
+
+        # except Exception as ex:
+        #     return protos.StreamingMessage(
+        #         request_id=self.request_id,
+        #         functions_index_response=protos.FunctionsIndexResponse(
+        #             functions_metadata=[],
+        #             result=protos.StatusResult(
+        #                 status=protos.StatusResult.Failure,
+        #                 exception=self._serialize_exception(ex))))
+
+        # For now, if there's any errors, we just don't index and let host do that.
+        # In future, we will need to add some error handling
+        except Exception as ex:
+            return protos.StreamingMessage(
+                request_id=self.request_id,
+                functions_index_response=protos.FunctionsIndexResponse(
+                    functions_metadata=functions_metadata
+                )
+            )
 
     async def _handle__function_load_request(self, req):
         func_request = req.function_load_request
@@ -280,18 +342,22 @@ class Dispatcher(metaclass=DispatcherMeta):
                     'function ID: %s', self.request_id, function_id)
 
         try:
-            func = loader.load_function(
-                func_request.metadata.name,
-                func_request.metadata.directory,
-                func_request.metadata.script_file,
-                func_request.metadata.entry_point)
+            if function_id in self._functions._functions.keys():
+                logger.info('Skipping FunctionsLoad as function already loaded, request ID: %s, '
+                        'function ID: %s', self.request_id, function_id)
+            else:
+                func = loader.load_function(
+                    func_request.metadata.name,
+                    func_request.metadata.directory,
+                    func_request.metadata.script_file,
+                    func_request.metadata.entry_point)
 
-            self._functions.add_function(
-                function_id, func, func_request.metadata)
+                self._functions.add_function(
+                    function_id, func, func_request.metadata)
 
-            logger.info('Successfully processed FunctionLoadRequest, '
-                        'request ID: %s, function ID: %s',
-                        self.request_id, function_id)
+                logger.info('Successfully processed FunctionLoadRequest, '
+                            'request ID: %s, function ID: %s',
+                            self.request_id, function_id)
 
             return protos.StreamingMessage(
                 request_id=self.request_id,
