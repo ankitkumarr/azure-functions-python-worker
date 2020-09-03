@@ -262,9 +262,7 @@ class Dispatcher(metaclass=DispatcherMeta):
 
         try:
             # load all the functions into place
-            functions = loader.load_function("main", function_dir, function_dir + os.path.sep + function_load_file , "main")
-            app = functions()
-            logger.info(app.app_name)
+            app = loader.load_app("main", function_dir, function_dir + os.path.sep + function_load_file , "app")
 
             # load the different functions that we need
             for name, function in app.functions.items():

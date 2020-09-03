@@ -82,3 +82,47 @@ def load_function(name: str, directory: str, script_file: str,
             f'present in {rel_script_path}')
 
     return func
+
+@attach_message_to_exception(
+    expt_type=ImportError,
+    message=f'Troubleshooting Guide: {MODULE_NOT_FOUND_TS_URL}'
+)
+def load_app(name: str, directory: str, script_file: str,
+                  entry_point: typing.Optional[str]):
+    dir_path = pathlib.Path(directory)
+    script_path = pathlib.Path(script_file)
+    if not entry_point:
+        entry_point = 'main'
+
+    register_function_dir(dir_path.parent)
+
+    try:
+        rel_script_path = script_path.relative_to(dir_path.parent)
+    except ValueError:
+        raise RuntimeError(
+            f'script path {script_file} is not relative to the specified '
+            f'directory {directory}'
+        )
+
+    last_part = rel_script_path.parts[-1]
+    modname, ext = os.path.splitext(last_part)
+    if ext != '.py':
+        raise RuntimeError(
+            f'cannot load app {name}: '
+            f'invalid Python filename {script_file}')
+
+    modname_parts = [_AZURE_NAMESPACE]
+    modname_parts.extend(rel_script_path.parts[:-1])
+    modname_parts.append(modname)
+
+    fullmodname = '.'.join(modname_parts)
+
+    mod = importlib.import_module(fullmodname)
+
+    func = getattr(mod, entry_point, None)
+    if func is None:
+        raise RuntimeError(
+            f'cannot load app {name}: function {entry_point}() is not '
+            f'present in {rel_script_path}')
+
+    return func
